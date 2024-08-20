@@ -1,13 +1,13 @@
 import os
-import aiofiles
 import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 import json
 import re
 from src.generator import DatasetGenerator
+from io import StringIO
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -36,7 +36,7 @@ async def root():
     return {"message": "Welcome to the Dataset Generator API"}
 
 @app.post("/generate/multi-turn")
-async def generate_multi_turn(request: MultiTurnRequest, background_tasks: BackgroundTasks):
+async def generate_multi_turn(request: MultiTurnRequest):
     async def generate():
         for conversation_index in range(request.num_conversations):
             try:
@@ -88,23 +88,20 @@ async def generate_multi_turn(request: MultiTurnRequest, background_tasks: Backg
                 logger.error(f"Error during generation of conversation {conversation_index + 1}: {str(e)}")
                 yield json.dumps({"error": f"Error in conversation {conversation_index + 1}: {str(e)}"}) + "\n"
 
-    async def save_to_file(content):
-        if request.output_file:
-            directory = os.path.dirname(request.output_file)
-            if directory:
-                os.makedirs(directory, exist_ok=True)
-            async with aiofiles.open(request.output_file, mode='w') as f:
-                await f.write(content)
-            logger.info(f"Content saved to {request.output_file}")
-
+    content = StringIO()
+    async for chunk in generate():
+        content.write(chunk)
+    
+    content.seek(0)
+    
     if request.output_file:
-        content = ""
-        async for chunk in generate():
-            content += chunk
-        background_tasks.add_task(save_to_file, content)
-        return JSONResponse(content={"message": f"Generation complete. {request.num_conversations} conversations saved to {request.output_file}"})
+        return FileResponse(
+            content.getvalue(),
+            media_type="application/json",
+            filename=request.output_file
+        )
     else:
-        return StreamingResponse(generate(), media_type="application/json")
+        return StreamingResponse(content, media_type="application/json")
 
 @app.exception_handler(404)
 async def custom_404_handler(request, exc):
