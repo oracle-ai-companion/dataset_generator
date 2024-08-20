@@ -1,40 +1,17 @@
 import os
-import google.generativeai as genai
-from google.api_core import retry
-from tenacity import retry, stop_after_attempt, wait_exponential
 import asyncio
 import aiofiles
 import json
 from typing import List, Dict, Any, AsyncGenerator, Union
-from dotenv import load_dotenv
+from src.gemini_client import GeminiClient
 
 class DatasetGenerator:
     def __init__(self):
-        load_dotenv()  # Load environment variables from .env file
-        api_key = os.getenv("API_KEY")
-        if not api_key:
-            raise ValueError("API_KEY not found in environment variables")
-        genai.configure(api_key=api_key)
-        self.models = {
-            "gemini-pro": genai.GenerativeModel("gemini-pro"),
-            "gemini-1.5-pro": genai.GenerativeModel("gemini-1.5-pro"),
-            "gemini-1.5-flash": genai.GenerativeModel("gemini-1.5-flash")
-        }
+        self.client = GeminiClient()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def _generate_content(self, prompt: str, model: str) -> str:
         try:
-            if model not in self.models:
-                raise ValueError(f"Invalid model name: {model}")
-            response = await self.models[model].generate_content_async(prompt)
-            if response.text:
-                return response.text
-            else:
-                # Check if the response was blocked
-                if response.prompt_feedback.block_reason:
-                    return f"Response blocked: {response.prompt_feedback.block_reason}"
-                else:
-                    return "No valid response generated"
+            return await self.client.generate_response(prompt, model)
         except Exception as e:
             print(f"Error generating content: {e}")
             raise

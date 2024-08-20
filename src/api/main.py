@@ -13,7 +13,14 @@ from src.generator import DatasetGenerator
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(
+    title="Dataset Generator API",
+    description="API for generating multi-turn conversational datasets",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
 generator = DatasetGenerator()
 
 class MultiTurnRequest(BaseModel):
@@ -23,6 +30,10 @@ class MultiTurnRequest(BaseModel):
     fine_tuning_format: bool = False
     output_file: Optional[str] = None
     num_conversations: int = Field(gt=0, default=1)
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Dataset Generator API"}
 
 @app.post("/generate/multi-turn")
 async def generate_multi_turn(request: MultiTurnRequest, background_tasks: BackgroundTasks):
@@ -94,6 +105,13 @@ async def generate_multi_turn(request: MultiTurnRequest, background_tasks: Backg
         return JSONResponse(content={"message": f"Generation complete. {request.num_conversations} conversations saved to {request.output_file}"})
     else:
         return StreamingResponse(generate(), media_type="application/json")
+
+@app.exception_handler(404)
+async def custom_404_handler(request, exc):
+    return JSONResponse(
+        status_code=404,
+        content={"message": "The requested resource was not found"}
+    )
 
 if __name__ == "__main__":
     import uvicorn
