@@ -1,6 +1,6 @@
 import os
 import logging
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
@@ -8,6 +8,7 @@ import json
 import re
 from src.generator import DatasetGenerator
 from io import StringIO
+import tempfile
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -95,8 +96,14 @@ async def generate_multi_turn(request: MultiTurnRequest):
     content.seek(0)
     
     if request.output_file:
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.jsonl') as temp_file:
+            temp_file.write(content.getvalue())
+            temp_file_path = temp_file.name
+
+        # Return the file as a downloadable response
         return FileResponse(
-            content.getvalue(),
+            temp_file_path,
             media_type="application/json",
             filename=request.output_file
         )
